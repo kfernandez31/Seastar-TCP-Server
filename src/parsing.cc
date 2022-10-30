@@ -5,12 +5,14 @@
 
 using std::string;
 using std::regex;
-
-const string resp_done = "DONE$";
-const string resp_not_found = "NOTFOUND$";
-const string resp_found = "FOUND$$";
 const std::regex rgx_store("STORE\\$(.*)\\$(.*)\\$");
 const std::regex rgx_load("LOAD\\$(.*)\\$");
+
+string make_resp_found(const string& val) {
+    string res(resp_found);
+    res.insert(resp_found.length() - 1, val);
+    return res;
+}
 
 op_type get_op_type_and_args(const string& req, string& key, string& val) {
     std::smatch matched_args;
