@@ -1,10 +1,10 @@
 #include "parsing.hh"
-
-#include <regex>
 #include "validation.hh"
+#include <regex>
 
 using std::string;
 using std::regex;
+
 const std::regex rgx_store("STORE\\$(.*)\\$(.*)\\$");
 const std::regex rgx_load("LOAD\\$(.*)\\$");
 
@@ -14,17 +14,10 @@ string make_resp_found(const string& val) {
     return res;
 }
 
-op_type get_op_type_and_args(const string& req, string& key, string& val) {
-    std::smatch matched_args;
-
-    if (regex_search(req.begin(), req.end(), matched_args, rgx_store)) {
-        key = matched_args[1];
-        val = matched_args[2];
+op_type get_op_type(const string& req, std::smatch& matched_args) {
+    if (regex_search(req.begin(), req.end(), matched_args, rgx_store)) 
         return op_type::STORE;
-    } else if (regex_search(req.begin(), req.end(), matched_args, rgx_load)) {
-        key = matched_args[1];
+    if (regex_search(req.begin(), req.end(), matched_args, rgx_load)) 
         return op_type::LOAD;
-    }
-
     return op_type::INVALID;
 }

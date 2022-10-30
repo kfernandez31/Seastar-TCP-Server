@@ -1,5 +1,4 @@
 #include "validation.hh"
-
 #include <regex>
 
 bool is_valid(const std::string& str) {

@@ -5,6 +5,8 @@ using std::optional;
 using std::nullopt;
 using seastar::future;
 
+MemoryStore::MemoryStore(): storage() {}
+
 future<> MemoryStore::store(const string& key, const string& value) {
     storage.insert({key, value});
     return seastar::make_ready_future<>();

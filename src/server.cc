@@ -1,9 +1,8 @@
 //TODO: think of `seastar::repeat` (chapter 11)
 
 #include "server.hh"
-
 #include "parsing.hh"
-#include <optional>
+#include "validation.hh"
 
 using namespace seastar;
 using namespace net;
@@ -50,28 +49,37 @@ void TCPConnection::accept() {
             return;
         }
 
-        sstring req = to_sstring(pkt), key, val;
+        sstring req = to_sstring(pkt);
+        std::smatch matched_args;
 
-        switch (get_op_type_and_args(req, key, val)) {
+        switch (get_op_type(req, matched_args)) {
             case op_type::STORE:
-                (void) server
-                    .getStore()
-                    .store(key, val)
-                    .then([this] {
-                        (void) conn.send(std::move(to_packet(resp_done)));
-                    });
+                if (is_valid(matched_args[1])) {
+                    (void) server
+                        .getStore()
+                        .store(matched_args[1], matched_args[2])
+                        .then([this] {
+                            (void) conn.send(std::move(to_packet(resp_done)));
+                        });
+                } else {
+                    (void) conn.send(std::move(to_packet(resp_invalid_args)));
+                }
                 break;
             case op_type::LOAD:
-                (void) server
-                    .getStore()
-                    .load(key)
-                    .then([&val, this] (std::optional<sstring> opt) {
-                        if (!opt.has_value()) {
-                            (void) conn.send(std::move(to_packet(resp_not_found)));
-                        } else {
-                            (void) conn.send(std::move(to_packet(make_resp_found(val))));
-                        }
-                    });
+                if (is_valid(matched_args[1]) && is_valid(matched_args[2])) {
+                    (void) server
+                        .getStore()
+                        .load(matched_args[1])
+                        .then([this] (std::optional<sstring> opt) {
+                            if (!opt.has_value()) {
+                                (void) conn.send(std::move(to_packet(resp_not_found)));
+                            } else {
+                                (void) conn.send(std::move(to_packet(make_resp_found(opt.value()))));
+                            }
+                        });
+                } else {
+                    (void) conn.send(std::move(to_packet(resp_invalid_args)));
+                }
                 break;
             default:
                 (void) conn.send(std::move(to_packet(resp_invalid_op)));
