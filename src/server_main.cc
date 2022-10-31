@@ -1,23 +1,28 @@
 #include "server.hh"
-
-#include <seastar/net/ip.hh>
-#include <seastar/net/virtio.hh>
-#include <seastar/net/tcp.hh>
-#include <seastar/net/native-stack.hh>
 #include <seastar/core/reactor.hh>
+#include <seastar/core/app-template.hh>
+#include <seastar/core/distributed.hh>
+#include <iostream>
 
 using namespace seastar;
-using namespace net;
+namespace bpo = boost::program_options;
 
-const std::string address = "127.0.0.1";
-
-int main() {
-    native_stack_options opts;
-    auto vnet = create_virtio_net_device(opts.virtio_opts, opts.lro);
-    interface netif(std::move(vnet));
-    ipv4 inet(&netif);
-    inet.set_host_address(ipv4_address(address));
-    TCPServer server(inet);
-    (void) engine().when_started().then([&server] { server.accept(); });
-    engine().run();
+int main(int ac, char** av) {
+    app_template app;
+    app.add_options()
+        ("port", bpo::value<uint16_t>()->default_value(5555), "TCP server port") ;
+    return app.run_deprecated(ac, av, [&] {
+        auto&& config = app.configuration();
+        uint16_t port = config["port"].as<uint16_t>();
+        auto server = new distributed<tcp_server>;
+        (void)server->start().then([server = std::move(server), port] () mutable {
+            engine().at_exit([server] {
+                return server->stop();
+            });
+            // Start listening in the background.
+            (void)server->invoke_on_all(&tcp_server::listen, ipv4_addr{port});
+        }).then([port] {
+            std::cout << "Seastar TCP server listening on port " << port << " ...\n";
+        });
+    });
 }

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
 #include <unordered_map>
 #include <seastar/core/future.hh>
+#include <string>
 
 template<typename K, typename V> 
 class Store {

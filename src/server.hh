@@ -1,32 +1,36 @@
 #pragma once
 
 #include <seastar/net/tcp.hh>
+#include <seastar/core/future.hh>
+#include <string>
 #include "store.hh"
 
-class Server {
-public:
-    virtual void accept() = 0;
-};
-
-class TCPServer : public Server {
-private:
-    seastar::net::ipv4& inet;
-    seastar::net::tcp<seastar::net::ipv4_traits>::listener listener;
+class tcp_server {
+    std::vector<seastar::server_socket> _tcp_listeners;
     MemoryStore store;
 public:
-    TCPServer(seastar::net::ipv4& inet);
-    MemoryStore& getStore();
-    void accept();
-};
+    MemoryStore& get_store();
+    seastar::future<> listen(seastar::ipv4_addr addr);
+    seastar::future<> stop();
+    void do_accepts(std::vector<seastar::server_socket>& listeners);
 
-class TCPConnection {
-private:
-    TCPServer& server;
-    seastar::net::tcp<seastar::net::ipv4_traits>::connection conn;
-public:
-    TCPConnection(
-        TCPServer& server,
-        seastar::net::tcp<seastar::net::ipv4_traits>::connection conn
-    );
-    void accept();
+    class tcp_connection {
+        tcp_server& _server;
+        seastar::connected_socket _fd;
+        seastar::input_stream<char> _read_buf;
+        seastar::output_stream<char> _write_buf;
+        seastar::future<> read();
+        seastar::future<> handle_store(const std::string& key, const std::string& val);
+        seastar::future<> handle_load(const std::string& key);
+        seastar::future<> handle_unknown_cmd();
+        seastar::future<> handle_invalid_args();
+        seastar::future<> write_and_flush(const std::string& msg);
+    public:
+        tcp_connection(
+            tcp_server& server, 
+            seastar::connected_socket&& fd, 
+            seastar::socket_address addr
+        );
+        seastar::future<> process();        
+    };
 };
