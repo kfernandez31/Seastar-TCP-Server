@@ -20,7 +20,7 @@ public:
         seastar::connected_socket _fd;
         seastar::input_stream<char> _read_buf;
         seastar::output_stream<char> _write_buf;
-        seastar::future<std::string> read();
+        seastar::future<std::optional<std::string>> read();
         seastar::future<> handle(const std::string& cmd);
         seastar::future<> handle_store(const std::string& key, const std::string& val);
         seastar::future<> handle_load(const std::string& key);

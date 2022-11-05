@@ -28,13 +28,11 @@ future<> tcp_server::stop() {
 }
 
 void tcp_server::do_accepts(std::vector<server_socket>& listeners) {
-    std::cout << "do_accepts" << "\n";
     int which = listeners.size() - 1;
     // Accept in the background.
     (void)listeners[which]
         .accept()
         .then([this, &listeners] (accept_result ar) mutable {
-            std::cout << "accept" << "\n";
             connected_socket fd = std::move(ar.connection);
             socket_address addr = std::move(ar.remote_address);
             auto conn = new tcp_connection(*this, std::move(fd), addr);
@@ -67,12 +65,14 @@ tcp_server::tcp_connection::tcp_connection(
 
 
 future<> tcp_server::tcp_connection::process() {
-    std::cout << "process\n";
     return 
     this->read()
-        .then([this] (std::string cmd) {
-            std::cout << "Process(" << cmd << ")\n";
-            return this->handle(cmd);
+        .then([this] (std::optional<std::string> cmd) {   
+            if (!cmd.has_value()) {
+                return make_ready_future();
+            } else {
+                return this->handle(cmd.value());
+            }
         });
 }
 
@@ -88,19 +88,19 @@ future<> tcp_server::tcp_connection::handle(const std::string& cmd) {
     }
 }
 
-future<std::string> tcp_server::tcp_connection::read() {
+future<std::optional<std::string>> tcp_server::tcp_connection::read() {
     if (_read_buf.eof()) {
-        return make_ready_future<std::string>("");
+        return make_ready_future<std::optional<std::string>>(std::nullopt);
     }
-    std::string cmd_buf;
+    auto cmd_buf = make_lw_shared<std::string>();
     return seastar::do_until(
-        [&cmd_buf] { return std::regex_match(cmd_buf, rgx_store) || std::regex_match(cmd_buf, rgx_load); }, 
-        [this, &cmd_buf] {
+        [cmd_buf] { return std::regex_match(*cmd_buf, rgx_store) || std::regex_match(*cmd_buf, rgx_load); }, 
+        [this, cmd_buf] {
             return _read_buf
             .read_exactly(1)
             .then([] (temporary_buffer<char> buf) { return buf[0]; })
-            .then([&cmd_buf](char c) { cmd_buf.push_back(c); });
-        }).then([this, &cmd_buf] { return cmd_buf; });
+            .then([cmd_buf](char c) { (*cmd_buf).push_back(c); });
+        }).then([this, cmd_buf] { return std::optional(*cmd_buf); });
 }
 
 future<> tcp_server::tcp_connection::write_and_flush(const std::string& msg) {
@@ -111,9 +111,6 @@ future<> tcp_server::tcp_connection::write_and_flush(const std::string& msg) {
 }
 
 future<> tcp_server::tcp_connection::handle_store(const std::string& key, const std::string& val) {
-    if (is_valid(key)) {
-        return handle_invalid_args();
-    }
     return _server.get_store()
         .store(key, val)
         .then([this] {
@@ -125,14 +122,11 @@ future<> tcp_server::tcp_connection::handle_store(const std::string& key, const 
 }
 
 future<> tcp_server::tcp_connection::handle_load(const std::string& key) {
-    if (is_valid(key)) {
-        return handle_invalid_args();
-    }
     return _server.get_store()
         .load(key)
         .then([this] (std::optional<std::string> val) {
             if (val.has_value()) {
-                return write_and_flush(val.value());
+                return write_and_flush(make_resp_found(val.value()));
             } else {
                 return write_and_flush(resp_not_found);
             }
