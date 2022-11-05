@@ -8,6 +8,8 @@ const std::string resp_invalid_args = "INVALID_ARGS";
 const std::string resp_done = "DONE$";
 const std::string resp_not_found = "NOTFOUND$";
 const std::string resp_found = "FOUND$$";
+const std::regex rgx_store("STORE\\$(.*)\\$(.*)\\$");
+const std::regex rgx_load("LOAD\\$(.*)\\$");
 
 typedef enum cmd_type {
     INVALID,

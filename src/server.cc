@@ -10,8 +10,6 @@
 using namespace seastar;
 using namespace net;
 
-static size_t nbytes = 1024;  // Expect 104 bytes cmd from client
-
 MemoryStore& tcp_server::get_store() {
     return store;
 }
@@ -30,11 +28,13 @@ future<> tcp_server::stop() {
 }
 
 void tcp_server::do_accepts(std::vector<server_socket>& listeners) {
+    std::cout << "do_accepts" << "\n";
     int which = listeners.size() - 1;
     // Accept in the background.
     (void)listeners[which]
         .accept()
         .then([this, &listeners] (accept_result ar) mutable {
+            std::cout << "accept" << "\n";
             connected_socket fd = std::move(ar.connection);
             socket_address addr = std::move(ar.remote_address);
             auto conn = new tcp_connection(*this, std::move(fd), addr);
@@ -67,30 +67,47 @@ tcp_server::tcp_connection::tcp_connection(
 
 
 future<> tcp_server::tcp_connection::process() {
-    return read();
+    std::cout << "process\n";
+    return 
+    this->read()
+        .then([this] (std::string cmd) {
+            std::cout << "Process(" << cmd << ")\n";
+            return this->handle(cmd);
+        });
 }
 
-future<> tcp_server::tcp_connection::read() {
-    if (_read_buf.eof()) {
-        return make_ready_future();
+future<> tcp_server::tcp_connection::handle(const std::string& cmd) {
+    std::smatch matched_args;
+    switch (get_cmd_type(cmd, matched_args)) {
+        case cmd_type::STORE:
+            return handle_store(matched_args[1], matched_args[2]);
+        case cmd_type::LOAD:
+            return handle_load(matched_args[1]);
+        default:
+            return handle_unknown_cmd();
     }
+}
 
-    return _read_buf.read_exactly(nbytes).then([this] (temporary_buffer<char> buf) {
-        if (buf.size() == 0) {
-            return make_ready_future();
-        }
-        auto cmd = std::string(buf.get(), buf.size());
-        std::smatch matched_args;
+future<std::string> tcp_server::tcp_connection::read() {
+    if (_read_buf.eof()) {
+        return make_ready_future<std::string>("");
+    }
+    std::string cmd_buf;
+    return seastar::do_until(
+        [&cmd_buf] { return std::regex_match(cmd_buf, rgx_store) || std::regex_match(cmd_buf, rgx_load); }, 
+        [this, &cmd_buf] {
+            return _read_buf
+            .read_exactly(1)
+            .then([] (temporary_buffer<char> buf) { return buf[0]; })
+            .then([&cmd_buf](char c) { cmd_buf.push_back(c); });
+        }).then([this, &cmd_buf] { return cmd_buf; });
+}
 
-        switch (get_cmd_type(cmd, matched_args)) {
-            case cmd_type::STORE:
-                return handle_store(matched_args[1], matched_args[2]);
-            case cmd_type::LOAD:
-                return handle_load(matched_args[1]);
-            default:
-                return handle_unknown_cmd();
-        }
-    });
+future<> tcp_server::tcp_connection::write_and_flush(const std::string& msg) {
+    return _write_buf.write(msg)
+        .then([this] {
+            return _write_buf.flush();
+        });
 }
 
 future<> tcp_server::tcp_connection::handle_store(const std::string& key, const std::string& val) {
@@ -103,7 +120,7 @@ future<> tcp_server::tcp_connection::handle_store(const std::string& key, const 
             return write_and_flush(resp_done);
         })
         .then([this] {
-            return this->read();
+            return this->process();
         });
 }
 
@@ -121,14 +138,7 @@ future<> tcp_server::tcp_connection::handle_load(const std::string& key) {
             }
         })
         .then([this] {
-            return this->read();
-        });
-}
-
-future<> tcp_server::tcp_connection::write_and_flush(const std::string& msg) {
-    return _write_buf.write(msg)
-        .then([this] {
-            return _write_buf.flush();
+            return this->process();
         });
 }
 

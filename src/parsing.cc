@@ -1,9 +1,6 @@
 #include "parsing.hh"
 #include "validation.hh"
 
-const std::regex rgx_store("STORE\\$(.*)\\$(.*)\\$");
-const std::regex rgx_load("LOAD\\$(.*)\\$");
-
 std::string make_resp_found(const std::string& val) {
     std::string res(resp_found);
     res.insert(resp_found.length() - 1, val);

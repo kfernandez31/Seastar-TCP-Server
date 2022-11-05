@@ -16,10 +16,12 @@ public:
 
     class tcp_connection {
         tcp_server& _server;
+        std::string buf;
         seastar::connected_socket _fd;
         seastar::input_stream<char> _read_buf;
         seastar::output_stream<char> _write_buf;
-        seastar::future<> read();
+        seastar::future<std::string> read();
+        seastar::future<> handle(const std::string& cmd);
         seastar::future<> handle_store(const std::string& key, const std::string& val);
         seastar::future<> handle_load(const std::string& key);
         seastar::future<> handle_unknown_cmd();

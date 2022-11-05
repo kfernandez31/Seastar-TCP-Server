@@ -7,10 +7,12 @@
 using namespace seastar;
 namespace bpo = boost::program_options;
 
+static const uint16_t default_port = 2137;
+
 int main(int ac, char** av) {
     app_template app;
     app.add_options()
-        ("port", bpo::value<uint16_t>()->default_value(5555), "TCP server port") ;
+        ("port", bpo::value<uint16_t>()->default_value(default_port), "TCP server port") ;
     return app.run_deprecated(ac, av, [&] {
         auto&& config = app.configuration();
         uint16_t port = config["port"].as<uint16_t>();
