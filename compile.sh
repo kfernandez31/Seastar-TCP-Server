@@ -1,5 +1,4 @@
 c++ \
-src/validation.cc \
 src/parsing.cc \
 src/store.cc \
 src/server.cc \
